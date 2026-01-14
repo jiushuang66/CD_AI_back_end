@@ -20,9 +20,9 @@ Class Design AI 后端API服务
 
 ```
 CD_AI_back_end/
+├── main.py                  # 应用入口 (FastAPI app instance)
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # 应用入口
 │   ├── config.py            # 配置文件
 │   ├── database.py          # 数据库连接
 │   ├── api/                 # API路由
@@ -80,10 +80,10 @@ pip install -r requirements.txt
 
 ```bash
 # 开发模式
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 # 生产模式
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ### 5. 访问API文档
