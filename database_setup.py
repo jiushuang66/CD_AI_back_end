@@ -80,6 +80,23 @@ CREATE TABLE IF NOT EXISTS `admins` (
 """
 
 
+USERS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS `users` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增主键ID',
+    `username` VARCHAR(64) NOT NULL COMMENT '用户名',
+    `password_hash` VARCHAR(255) NOT NULL COMMENT '密码哈希',
+    `email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱',
+    `full_name` VARCHAR(128) DEFAULT NULL COMMENT '姓名',
+    `role` VARCHAR(64) NOT NULL DEFAULT 'user' COMMENT '角色',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uniq_username` (`username`),
+    KEY `idx_role` (`role`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通用用户表';
+"""
+
+
 FILE_RECORDS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS `file_records` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增主键ID',
@@ -282,6 +299,7 @@ def init_db(database_url: str | None = None) -> None:
                 STUDENTS_TABLE_SQL,
                 TEACHERS_TABLE_SQL,
                 ADMINS_TABLE_SQL,
+                USERS_TABLE_SQL,
                 FILE_RECORDS_TABLE_SQL,
                 GROUPS_TABLE_SQL,
                 GROUP_MEMBERS_TABLE_SQL,
@@ -296,7 +314,7 @@ def init_db(database_url: str | None = None) -> None:
                 cur.execute(sql)
         print(
             "Tables ensured: students, teachers, admins, file_records, groups, group_members, "
-            "papers, paper_versions, paper_status_records, annotations, templates, user_messages, operation_logs"
+            "users, papers, paper_versions, paper_status_records, annotations, templates, user_messages, operation_logs"
         )
     finally:
         conn.close()
@@ -346,6 +364,16 @@ TABLE_COLUMN_DEFINITIONS = {
         "role": "`role` VARCHAR(64) NOT NULL DEFAULT 'admin' COMMENT '管理员角色'",
         "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
         "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间'",
+    },
+    "users": {
+        "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY",
+        "username": "`username` VARCHAR(64) NOT NULL COMMENT '用户名'",
+        "password_hash": "`password_hash` VARCHAR(255) NOT NULL COMMENT '密码哈希'",
+        "email": "`email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱'",
+        "full_name": "`full_name` VARCHAR(128) DEFAULT NULL COMMENT '姓名'",
+        "role": "`role` VARCHAR(64) NOT NULL DEFAULT 'user' COMMENT '角色'",
+        "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'",
+        "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'",
     },
     "file_records": {
         "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY",
@@ -469,6 +497,9 @@ TABLE_INDEX_DEFINITIONS = {
     "admins": [
         "CREATE INDEX idx_name ON `admins` (name)",
         "CREATE INDEX idx_role ON `admins` (role)"
+    ],
+    "users": [
+        "CREATE INDEX idx_role ON `users` (role)"
     ],
     "file_records": [
         "CREATE INDEX idx_name ON `file_records` (name)",

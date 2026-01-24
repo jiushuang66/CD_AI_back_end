@@ -149,6 +149,12 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 	- POST `/notifications/push`（信息推送，记录到操作日志）
 	- GET  `/notifications/query`（信息查询，支持按用户与分页）
 
+- 用户 Users
+	- POST `/users/`（创建用户）
+	- PUT  `/users/{user_id}`（更新用户信息）
+	- DELETE `/users/{user_id}`（删除用户）
+	- POST `/users/import`（一键导入用户，CSV/TSV）
+
 ## 注意事项
 
 - 认证与权限：当前部分接口使用模拟用户，实际接入请启用 [app/core/dependencies.py](app/core/dependencies.py) 与 [app/core/security.py](app/core/security.py)。
