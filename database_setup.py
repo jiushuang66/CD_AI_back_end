@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS `students` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增主键ID',
     `student_id` VARCHAR(20) NOT NULL COMMENT '学号',
     `name` VARCHAR(128) NOT NULL COMMENT '姓名',
+    `phone` VARCHAR(32) DEFAULT NULL COMMENT '联系电话',
+    `email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱',
     `grade` VARCHAR(64) DEFAULT NULL COMMENT '年级',
     `class_name` VARCHAR(64) DEFAULT NULL COMMENT '班级',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
@@ -41,6 +43,8 @@ CREATE TABLE IF NOT EXISTS `students` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uniq_student_id` (`student_id`),
     KEY `idx_name` (`name`),
+    KEY `idx_student_phone` (`phone`),
+    KEY `idx_student_email` (`email`),
     KEY `idx_grade` (`grade`),
     KEY `idx_class_name` (`class_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生信息表';
@@ -52,6 +56,8 @@ CREATE TABLE IF NOT EXISTS `teachers` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增主键ID',
     `teacher_id` VARCHAR(64) NOT NULL COMMENT '教师工号',
     `name` VARCHAR(128) NOT NULL COMMENT '姓名',
+    `phone` VARCHAR(32) DEFAULT NULL COMMENT '联系电话',
+    `email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱',
     `department` VARCHAR(128) DEFAULT NULL COMMENT '院系/部门',
     `title` VARCHAR(64) DEFAULT NULL COMMENT '职称',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
@@ -59,6 +65,8 @@ CREATE TABLE IF NOT EXISTS `teachers` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uniq_teacher_id` (`teacher_id`),
     KEY `idx_name` (`name`),
+    KEY `idx_teacher_phone` (`phone`),
+    KEY `idx_teacher_email` (`email`),
     KEY `idx_department` (`department`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='教师信息表';
 """
@@ -69,31 +77,18 @@ CREATE TABLE IF NOT EXISTS `admins` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增主键ID',
     `admin_id` VARCHAR(64) NOT NULL COMMENT '管理员账号ID',
     `name` VARCHAR(128) NOT NULL COMMENT '姓名',
+    `phone` VARCHAR(32) DEFAULT NULL COMMENT '联系电话',
+    `email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱',
     `role` VARCHAR(64) NOT NULL DEFAULT 'admin' COMMENT '管理员角色',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uniq_admin_id` (`admin_id`),
     KEY `idx_name` (`name`),
+    KEY `idx_admin_phone` (`phone`),
+    KEY `idx_admin_email` (`email`),
     KEY `idx_role` (`role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管理员信息表';
-"""
-
-
-USERS_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS `users` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增主键ID',
-    `username` VARCHAR(64) NOT NULL COMMENT '用户名',
-    `password_hash` VARCHAR(255) NOT NULL COMMENT '密码哈希',
-    `email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱',
-    `full_name` VARCHAR(128) DEFAULT NULL COMMENT '姓名',
-    `role` VARCHAR(64) NOT NULL DEFAULT 'user' COMMENT '角色',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uniq_username` (`username`),
-    KEY `idx_role` (`role`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通用用户表';
 """
 
 
@@ -299,7 +294,6 @@ def init_db(database_url: str | None = None) -> None:
                 STUDENTS_TABLE_SQL,
                 TEACHERS_TABLE_SQL,
                 ADMINS_TABLE_SQL,
-                USERS_TABLE_SQL,
                 FILE_RECORDS_TABLE_SQL,
                 GROUPS_TABLE_SQL,
                 GROUP_MEMBERS_TABLE_SQL,
@@ -314,7 +308,7 @@ def init_db(database_url: str | None = None) -> None:
                 cur.execute(sql)
         print(
             "Tables ensured: students, teachers, admins, file_records, groups, group_members, "
-            "users, papers, paper_versions, paper_status_records, annotations, templates, user_messages, operation_logs"
+            "papers, paper_versions, paper_status_records, annotations, templates, user_messages, operation_logs"
         )
     finally:
         conn.close()
@@ -343,6 +337,8 @@ TABLE_COLUMN_DEFINITIONS = {
         "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY",
         "student_id": "`student_id` VARCHAR(20) NOT NULL COMMENT '学号'",
         "name": "`name` VARCHAR(128) NOT NULL COMMENT '姓名'",
+        "phone": "`phone` VARCHAR(32) DEFAULT NULL COMMENT '联系电话'",
+        "email": "`email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱'",
         "grade": "`grade` VARCHAR(64) DEFAULT NULL COMMENT '年级'",
         "class_name": "`class_name` VARCHAR(64) DEFAULT NULL COMMENT '班级'",
         "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
@@ -352,6 +348,8 @@ TABLE_COLUMN_DEFINITIONS = {
         "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY",
         "teacher_id": "`teacher_id` VARCHAR(64) NOT NULL COMMENT '教师工号'",
         "name": "`name` VARCHAR(128) NOT NULL COMMENT '姓名'",
+        "phone": "`phone` VARCHAR(32) DEFAULT NULL COMMENT '联系电话'",
+        "email": "`email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱'",
         "department": "`department` VARCHAR(128) DEFAULT NULL COMMENT '院系/部门'",
         "title": "`title` VARCHAR(64) DEFAULT NULL COMMENT '职称'",
         "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
@@ -361,19 +359,11 @@ TABLE_COLUMN_DEFINITIONS = {
         "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY",
         "admin_id": "`admin_id` VARCHAR(64) NOT NULL COMMENT '管理员账号ID'",
         "name": "`name` VARCHAR(128) NOT NULL COMMENT '姓名'",
+        "phone": "`phone` VARCHAR(32) DEFAULT NULL COMMENT '联系电话'",
+        "email": "`email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱'",
         "role": "`role` VARCHAR(64) NOT NULL DEFAULT 'admin' COMMENT '管理员角色'",
         "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
         "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间'",
-    },
-    "users": {
-        "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY",
-        "username": "`username` VARCHAR(64) NOT NULL COMMENT '用户名'",
-        "password_hash": "`password_hash` VARCHAR(255) NOT NULL COMMENT '密码哈希'",
-        "email": "`email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱'",
-        "full_name": "`full_name` VARCHAR(128) DEFAULT NULL COMMENT '姓名'",
-        "role": "`role` VARCHAR(64) NOT NULL DEFAULT 'user' COMMENT '角色'",
-        "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'",
-        "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'",
     },
     "file_records": {
         "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY",
@@ -487,19 +477,22 @@ TABLE_COLUMN_DEFINITIONS = {
 TABLE_INDEX_DEFINITIONS = {
     "students": [
         "CREATE INDEX idx_name ON `students` (name)",
+        "CREATE INDEX idx_student_phone ON `students` (phone)",
+        "CREATE INDEX idx_student_email ON `students` (email)",
         "CREATE INDEX idx_grade ON `students` (grade)",
         "CREATE INDEX idx_class_name ON `students` (class_name)"
     ],
     "teachers": [
         "CREATE INDEX idx_name ON `teachers` (name)",
+        "CREATE INDEX idx_teacher_phone ON `teachers` (phone)",
+        "CREATE INDEX idx_teacher_email ON `teachers` (email)",
         "CREATE INDEX idx_department ON `teachers` (department)"
     ],
     "admins": [
         "CREATE INDEX idx_name ON `admins` (name)",
+        "CREATE INDEX idx_admin_phone ON `admins` (phone)",
+        "CREATE INDEX idx_admin_email ON `admins` (email)",
         "CREATE INDEX idx_role ON `admins` (role)"
-    ],
-    "users": [
-        "CREATE INDEX idx_role ON `users` (role)"
     ],
     "file_records": [
         "CREATE INDEX idx_name ON `file_records` (name)",

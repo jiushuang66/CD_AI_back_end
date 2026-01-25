@@ -5,7 +5,13 @@ import csv
 import io
 import pymysql
 from typing import List
-from app.schemas.user import UserCreate, UserUpdate, UserOut
+from app.schemas.user import (
+    UserCreate,
+    UserUpdate,
+    UserOut,
+    UserBindPhone,
+    UserBindEmail,
+)
 from app.core.security import get_password_hash
 from app.database import get_db
 from loguru import logger
@@ -23,7 +29,7 @@ def _hash_or_default_password(raw: str | None) -> str:
 def _fetch_user(cursor: pymysql.cursors.Cursor, user_id: int) -> dict | None:
     cursor.execute(
         """
-        SELECT id, username, email, full_name, role, created_at, updated_at
+        SELECT id, username, phone, email, full_name, role, created_at, updated_at
         FROM users WHERE id = %s
         """,
         (user_id,),
@@ -37,11 +43,11 @@ def _fetch_user(cursor: pymysql.cursors.Cursor, user_id: int) -> dict | None:
     return {
         "id": row[0],
         "username": row[1],
-        "email": row[2],
-        "full_name": row[3],
-        "role": row[4],
-        "created_at": row[5].strftime("%Y-%m-%d %H:%M:%S"),
-        "updated_at": row[6].strftime("%Y-%m-%d %H:%M:%S"),
+        "email": row[3],
+        "full_name": row[4],
+        "role": row[5],
+        "created_at": row[6].strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": row[7].strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
@@ -58,12 +64,13 @@ def create_user(payload: UserCreate, db: pymysql.connections.Connection = Depend
         hashed_password = _hash_or_default_password(payload.password)
         cursor.execute(
             """
-            INSERT INTO users (username, password_hash, email, full_name, role)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO users (username, password_hash, phone, email, full_name, role)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
             (
                 payload.username.strip(),
                 hashed_password,
+                payload.phone,
                 payload.email,
                 payload.full_name,
                 payload.role or "user",
@@ -73,7 +80,7 @@ def create_user(payload: UserCreate, db: pymysql.connections.Connection = Depend
         user_id = cursor.lastrowid
         cursor.execute(
             """
-            SELECT id, username, email, full_name, role, created_at, updated_at
+            SELECT id, username, phone, email, full_name, role, created_at, updated_at
             FROM users WHERE id = %s
             """,
             (user_id,),
@@ -110,6 +117,9 @@ def update_user(user_id: int, payload: UserUpdate, db: pymysql.connections.Conne
 
         fields = []
         params: List[str] = []
+        if payload.phone is not None:
+            fields.append("phone = %s")
+            params.append(payload.phone)
         if payload.email is not None:
             fields.append("email = %s")
             params.append(payload.email)
@@ -213,6 +223,7 @@ async def import_users(file: UploadFile = File(...), db: pymysql.connections.Con
             username = (row.get("username") or "").strip()
             if not username:
                 continue
+            phone = (row.get("phone") or None) and row.get("phone").strip()
             email = (row.get("email") or None) and row.get("email").strip()
             full_name = (row.get("full_name") or None) and row.get("full_name").strip()
             role = (row.get("role") or default_role).strip() or default_role
@@ -220,16 +231,17 @@ async def import_users(file: UploadFile = File(...), db: pymysql.connections.Con
             pwd_hash = _hash_or_default_password(pwd_raw)
             cursor.execute(
                 """
-                INSERT INTO users (username, password_hash, email, full_name, role)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO users (username, password_hash, phone, email, full_name, role)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
+                    phone = VALUES(phone),
                     email = VALUES(email),
                     full_name = VALUES(full_name),
                     role = VALUES(role),
                     password_hash = VALUES(password_hash),
                     updated_at = NOW()
                 """,
-                (username, pwd_hash, email, full_name, role),
+                (username, pwd_hash, phone, email, full_name, role),
             )
             if cursor.rowcount == 1:
                 created += 1
@@ -246,6 +258,74 @@ async def import_users(file: UploadFile = File(...), db: pymysql.connections.Con
         db.rollback()
         logger.error(f"用户导入数据库错误: {str(e)}")
         raise HTTPException(status_code=500, detail="用户导入失败")
+    finally:
+        if cursor:
+            cursor.close()
+
+
+@router.put(
+    "/{user_id}/bind-phone",
+    response_model=UserOut,
+    summary="绑定手机号",
+    description="为指定用户绑定/更新手机号"
+)
+def bind_phone(user_id: int, payload: UserBindPhone, db: pymysql.connections.Connection = Depends(get_db)):
+    cursor = None
+    try:
+        cursor = db.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        cursor.execute(
+            "UPDATE users SET phone = %s, updated_at = NOW() WHERE id = %s",
+            (payload.phone.strip(), user_id),
+        )
+        db.commit()
+        updated = _fetch_user(cursor, user_id)
+        if not updated:
+            raise HTTPException(status_code=500, detail="手机号绑定后查询失败")
+        return UserOut(**updated)
+    except HTTPException:
+        raise
+    except pymysql.MySQLError as e:
+        db.rollback()
+        logger.error(f"绑定手机号数据库错误: {str(e)}")
+        raise HTTPException(status_code=500, detail="绑定手机号失败")
+    finally:
+        if cursor:
+            cursor.close()
+
+
+@router.put(
+    "/{user_id}/bind-email",
+    response_model=UserOut,
+    summary="绑定邮箱",
+    description="为指定用户绑定/更新邮箱"
+)
+def bind_email(user_id: int, payload: UserBindEmail, db: pymysql.connections.Connection = Depends(get_db)):
+    cursor = None
+    try:
+        cursor = db.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        cursor.execute(
+            "UPDATE users SET email = %s, updated_at = NOW() WHERE id = %s",
+            (payload.email, user_id),
+        )
+        db.commit()
+        updated = _fetch_user(cursor, user_id)
+        if not updated:
+            raise HTTPException(status_code=500, detail="邮箱绑定后查询失败")
+        return UserOut(**updated)
+    except HTTPException:
+        raise
+    except pymysql.MySQLError as e:
+        db.rollback()
+        logger.error(f"绑定邮箱数据库错误: {str(e)}")
+        raise HTTPException(status_code=500, detail="绑定邮箱失败")
     finally:
         if cursor:
             cursor.close()
