@@ -12,25 +12,18 @@ from app.schemas.user import (
     UserBindPhone,
     UserBindEmail,
 )
-from app.core.security import get_password_hash
 from app.database import get_db
 from loguru import logger
 
 router = APIRouter()
-DEFAULT_PASSWORD = "ChangeMe123!"
 SUPPORTED_IMPORT_EXTS = (".csv", ".tsv")
-
-
-def _hash_or_default_password(raw: str | None) -> str:
-    password = raw or DEFAULT_PASSWORD
-    return get_password_hash(password)
 
 
 def _fetch_user(cursor: pymysql.cursors.Cursor, user_id: int) -> dict | None:
     cursor.execute(
         """
-        SELECT id, username, phone, email, full_name, role, created_at, updated_at
-        FROM users WHERE id = %s
+        SELECT id, admin_id, name, phone, email, role, created_at, updated_at
+        FROM admins WHERE id = %s
         """,
         (user_id,),
     )
@@ -38,16 +31,26 @@ def _fetch_user(cursor: pymysql.cursors.Cursor, user_id: int) -> dict | None:
     if not row:
         return None
     if isinstance(row, dict):
-        return row
+        return {
+            "id": row["id"],
+            "username": row["admin_id"],
+            "phone": row["phone"],
+            "email": row["email"],
+            "full_name": row["name"],
+            "role": row["role"],
+            "created_at": row["created_at"] if isinstance(row["created_at"], str) else row["created_at"].strftime("%Y-%m-%d %H:%M:%S"),
+            "updated_at": row["updated_at"] if isinstance(row["updated_at"], str) else row["updated_at"].strftime("%Y-%m-%d %H:%M:%S"),
+        }
     # fallback for tuple cursor
     return {
         "id": row[0],
         "username": row[1],
-        "email": row[3],
-        "full_name": row[4],
+        "phone": row[3],
+        "email": row[4],
+        "full_name": row[2],
         "role": row[5],
-        "created_at": row[6].strftime("%Y-%m-%d %H:%M:%S"),
-        "updated_at": row[7].strftime("%Y-%m-%d %H:%M:%S"),
+        "created_at": row[6] if isinstance(row[6], str) else row[6].strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": row[7] if isinstance(row[7], str) else row[7].strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
@@ -61,27 +64,27 @@ def create_user(payload: UserCreate, db: pymysql.connections.Connection = Depend
     cursor = None
     try:
         cursor = db.cursor(pymysql.cursors.DictCursor)
-        hashed_password = _hash_or_default_password(payload.password)
         cursor.execute(
             """
-            INSERT INTO users (username, password_hash, phone, email, full_name, role)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO admins (admin_id, name, phone, email, role)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (
                 payload.username.strip(),
-                hashed_password,
+                payload.full_name,
                 payload.phone,
                 payload.email,
-                payload.full_name,
-                payload.role or "user",
+                payload.role or "admin",
             ),
         )
         db.commit()
         user_id = cursor.lastrowid
         cursor.execute(
             """
-            SELECT id, username, phone, email, full_name, role, created_at, updated_at
-            FROM users WHERE id = %s
+            SELECT id, admin_id as username, name as full_name, phone, email, role,
+                   DATE_FORMAT(created_at, '%%Y-%%m-%%d %%H:%%i:%%s') as created_at,
+                   DATE_FORMAT(updated_at, '%%Y-%%m-%%d %%H:%%i:%%s') as updated_at
+            FROM admins WHERE id = %s
             """,
             (user_id,),
         )
@@ -111,7 +114,7 @@ def update_user(user_id: int, payload: UserUpdate, db: pymysql.connections.Conne
     cursor = None
     try:
         cursor = db.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT id FROM admins WHERE id = %s", (user_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="用户不存在")
 
@@ -124,14 +127,11 @@ def update_user(user_id: int, payload: UserUpdate, db: pymysql.connections.Conne
             fields.append("email = %s")
             params.append(payload.email)
         if payload.full_name is not None:
-            fields.append("full_name = %s")
+            fields.append("name = %s")
             params.append(payload.full_name)
         if payload.role is not None:
             fields.append("role = %s")
             params.append(payload.role)
-        if payload.password:
-            fields.append("password_hash = %s")
-            params.append(_hash_or_default_password(payload.password))
 
         if not fields:
             existing = _fetch_user(cursor, user_id)
@@ -140,7 +140,7 @@ def update_user(user_id: int, payload: UserUpdate, db: pymysql.connections.Conne
             return UserOut(**existing)
 
         fields.append("updated_at = NOW()")
-        sql = f"UPDATE users SET {', '.join(fields)} WHERE id = %s"
+        sql = f"UPDATE admins SET {', '.join(fields)} WHERE id = %s"
         params.append(user_id)
         cursor.execute(sql, tuple(params))
         db.commit()
@@ -168,10 +168,10 @@ def delete_user(user_id: int, db: pymysql.connections.Connection = Depends(get_d
     cursor = None
     try:
         cursor = db.cursor()
-        cursor.execute("SELECT 1 FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT 1 FROM admins WHERE id = %s", (user_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="用户不存在")
-        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        cursor.execute("DELETE FROM admins WHERE id = %s", (user_id,))
         db.commit()
         return {"message": "删除成功", "user_id": user_id}
     except HTTPException:
@@ -188,7 +188,7 @@ def delete_user(user_id: int, db: pymysql.connections.Connection = Depends(get_d
 @router.post(
     "/import",
     summary="一键导入用户",
-    description="上传 CSV/TSV 文件批量导入用户（列：username,email,full_name,role,password 可选）"
+    description="上传 CSV/TSV 文件批量导入用户（列：username,email,full_name,role 可选）"
 )
 async def import_users(file: UploadFile = File(...), db: pymysql.connections.Connection = Depends(get_db)):
     filename = file.filename or ""
@@ -215,7 +215,7 @@ async def import_users(file: UploadFile = File(...), db: pymysql.connections.Con
         raise HTTPException(status_code=400, detail="文件缺少 username 列")
 
     created, updated = 0, 0
-    default_role = "user"
+    default_role = "admin"
     cursor = None
     try:
         cursor = db.cursor()
@@ -227,21 +227,20 @@ async def import_users(file: UploadFile = File(...), db: pymysql.connections.Con
             email = (row.get("email") or None) and row.get("email").strip()
             full_name = (row.get("full_name") or None) and row.get("full_name").strip()
             role = (row.get("role") or default_role).strip() or default_role
-            pwd_raw = (row.get("password") or None)
-            pwd_hash = _hash_or_default_password(pwd_raw)
+            if not full_name:
+                full_name = username  # 默认使用username作为full_name
             cursor.execute(
                 """
-                INSERT INTO users (username, password_hash, phone, email, full_name, role)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO admins (admin_id, name, phone, email, role)
+                VALUES (%s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
                     phone = VALUES(phone),
                     email = VALUES(email),
-                    full_name = VALUES(full_name),
                     role = VALUES(role),
-                    password_hash = VALUES(password_hash),
                     updated_at = NOW()
                 """,
-                (username, pwd_hash, phone, email, full_name, role),
+                (username, full_name, phone, email, role),
             )
             if cursor.rowcount == 1:
                 created += 1
@@ -252,7 +251,6 @@ async def import_users(file: UploadFile = File(...), db: pymysql.connections.Con
             "message": "导入完成",
             "created": created,
             "updated": updated,
-            "default_password": DEFAULT_PASSWORD,
         }
     except pymysql.MySQLError as e:
         db.rollback()
@@ -273,12 +271,12 @@ def bind_phone(user_id: int, payload: UserBindPhone, db: pymysql.connections.Con
     cursor = None
     try:
         cursor = db.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT id FROM admins WHERE id = %s", (user_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="用户不存在")
 
         cursor.execute(
-            "UPDATE users SET phone = %s, updated_at = NOW() WHERE id = %s",
+            "UPDATE admins SET phone = %s, updated_at = NOW() WHERE id = %s",
             (payload.phone.strip(), user_id),
         )
         db.commit()
@@ -307,12 +305,12 @@ def bind_email(user_id: int, payload: UserBindEmail, db: pymysql.connections.Con
     cursor = None
     try:
         cursor = db.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT id FROM admins WHERE id = %s", (user_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="用户不存在")
 
         cursor.execute(
-            "UPDATE users SET email = %s, updated_at = NOW() WHERE id = %s",
+            "UPDATE admins SET email = %s, updated_at = NOW() WHERE id = %s",
             (payload.email, user_id),
         )
         db.commit()
