@@ -41,13 +41,20 @@ async def import_groups(
     current_user: Optional[str] = Query(None),
 ):
    # 这里只做接收并返回模拟结果；实际应解析 Excel 并写入 db
-    if isinstance(current_user, str):
-        # 解码URL编码的字符串
-        import urllib.parse
-        current_user = urllib.parse.unquote(current_user)
-        # 解析为字典
-        current_user = json.loads(current_user)
-    if not isinstance(current_user, dict):
+    try:
+        if isinstance(current_user, str):
+            # 解码URL编码的字符串
+            import urllib.parse
+            current_user = urllib.parse.unquote(current_user)
+            if current_user.strip():
+                # 解析为字典
+                current_user = json.loads(current_user)
+            else:
+                current_user = None
+        if not isinstance(current_user, dict):
+            current_user = {"sub": 0, "username": "", "roles": []}
+    except (json.JSONDecodeError, Exception) as e:
+        logger.error(f"解析current_user失败: {str(e)}")
         current_user = {"sub": 0, "username": "", "roles": []}
 
     # 权限校验
