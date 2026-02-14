@@ -14,6 +14,18 @@ from app.database import get_connection
 router = APIRouter()
 
 
+class CurrentUser(BaseModel):
+    """当前用户信息"""
+    sub: int
+    username: str
+    roles: list[str]
+
+
+class RequestWithCurrentUser(BaseModel):
+    """包含current_user的通用请求体"""
+    current_user: CurrentUser
+
+
 class GroupCreate(BaseModel):
     """创建群组请求体"""
 
@@ -21,6 +33,7 @@ class GroupCreate(BaseModel):
     group_name: str
     teacher_id: str | None = None
     description: str | None = None
+    current_user: CurrentUser
 
 
 class GroupMember(BaseModel):
@@ -29,12 +42,14 @@ class GroupMember(BaseModel):
     member_id: int
     member_type: str  # 学生 student / 教师 teacher / 管理员 admin
     role: str = "member"  # 成员 member / 管理员 admin / 群主 owner
+    current_user: CurrentUser
 
 
 class GroupUpdate(BaseModel):
     group_name: str | None = None
     teacher_id: str | None = None
     description: str | None = None
+    current_user: CurrentUser
 
 
 class GroupBind(BaseModel):
@@ -44,6 +59,7 @@ class GroupBind(BaseModel):
     member_type: str  # 只能是 teacher 或 student
     member_id: int     # 用户内部 ID
     role: str = "member"  # 成员角色：member 或 admin
+    current_user: CurrentUser
 
 
 class BindRequest(BaseModel):
@@ -54,6 +70,8 @@ class BindRequest(BaseModel):
 def _parse_current_user(current_user: Optional[dict|str]) -> dict:
     """Normalize current_user input to dict with keys: sub, username, roles"""
     try:
+        if isinstance(current_user, dict):
+            return current_user
         if isinstance(current_user, str):
             import urllib.parse
             cu = urllib.parse.unquote(current_user)
@@ -383,17 +401,17 @@ async def import_groups(
                 
                 # 插入或更新教师
                 cursor.execute("""
-                    INSERT INTO `teachers` (`teacher_id`, `name`)
-                    VALUES (%s, %s)
+                    INSERT INTO `teachers` (`teacher_id`, `name`, `password`)
+                    VALUES (%s, %s, %s)
                     ON DUPLICATE KEY UPDATE `name`=VALUES(`name`)
-                """, (item["teacher_id"], item["teacher_id"]))  # 假设name就是teacher_id，如果有更好数据可以改
+                """, (item["teacher_id"], item["teacher_id"], ""))  # 假设name就是teacher_id，如果有更好数据可以改
                 
                 # 插入或更新学生
                 cursor.execute("""
-                    INSERT INTO `students` (`student_id`, `name`)
-                    VALUES (%s, %s)
+                    INSERT INTO `students` (`student_id`, `name`, `password`)
+                    VALUES (%s, %s, %s)
                     ON DUPLICATE KEY UPDATE `name`=VALUES(`name`)
-                """, (item["student_id"], item["student_name"]))
+                """, (item["student_id"], item["student_name"], ""))
                 
                 # 获取学生ID
                 cursor.execute("SELECT `id` FROM `students` WHERE `student_id` = %s", (item["student_id"],))
@@ -457,13 +475,13 @@ async def import_groups(
     )
 )
 async def create_group(
-    group_name: str = Query(..., description="群组名称"),
-    group_id: str = Query(None, description="群组 ID（不传则自动生成）"),
-    teacher_id: str = Query(None, description="教师工号"),
-    description: str = Query(None, description="群组描述"),
-    current_user: dict = {"roles": ["admin"], "username": "test_user"}
+    payload: GroupCreate
 ):
-    cu = _parse_current_user(current_user)
+    cu = _parse_current_user(payload.current_user.model_dump())
+    group_name = payload.group_name
+    group_id = payload.group_id
+    teacher_id = payload.teacher_id
+    description = payload.description
     # Only teachers or admins can create groups
     allowed = {"admin", "teacher"}
 
@@ -541,15 +559,16 @@ async def create_group(
     description="将用户绑定到指定群组"
 )
 async def bind_group(
-    group_id: str = Query(..., description="群组 ID"),
-    group_name: str = Query(..., description="班级名称"),
-    member_type: str = Query(..., description="入群身份，只能是 teacher 或 student"),
-    member_id: int = Query(..., description="用户内部 ID"),
-    role: str = Query("member", description="角色，只能是 member 或 admin"),
-    current_user: dict = {"roles": ["admin"], "username": "test_user"}
+    payload: GroupBind
 ):
     """绑定用户到群组的实现"""
-    # 解析请求体
+    cu = _parse_current_user(payload.current_user.model_dump())
+    group_id = payload.group_id
+    group_name = payload.group_name
+    member_type = payload.member_type
+    member_id = payload.member_id
+    role = payload.role
+    
     try:
         # 验证入群身份
         if member_type not in ["teacher", "student"]:
@@ -610,13 +629,18 @@ async def bind_group(
         conn.close()
 
 
+class DeleteGroupRequest(BaseModel):
+    """删除群组请求体"""
+    current_user: CurrentUser
+
+
 @router.delete(
     "/{group_id}",
     summary="删除群组",
     description="根据群组编号删除群组及其所有成员关系"
 )
-async def delete_group(group_id: str, current_user: dict = {"roles": ["admin"], "username": "test_user"}):
-    cu = _parse_current_user(current_user)
+async def delete_group(group_id: str, payload: DeleteGroupRequest):
+    cu = _parse_current_user(payload.current_user.model_dump())
     # Only group owner can delete (dissolve) the group
 
     conn = get_connection()
@@ -655,8 +679,8 @@ async def delete_group(group_id: str, current_user: dict = {"roles": ["admin"], 
     summary="更新群组",
     description="更新群组信息（群名/教师/描述），仅群主或群组管理员可更新"
 )
-async def update_group(group_id: str, payload: GroupUpdate, current_user: dict = {"roles": ["admin"], "username": "test_user"}):
-    cu = _parse_current_user(current_user)
+async def update_group(group_id: str, payload: GroupUpdate):
+    cu = _parse_current_user(payload.current_user.model_dump())
     conn = get_connection()
     try:
         cursor = conn.cursor()
@@ -718,9 +742,9 @@ async def update_group(group_id: str, payload: GroupUpdate, current_user: dict =
     summary="添加群组成员",
     description="为指定群组添加成员（学生/教师/管理员）"
 )
-async def add_group_member(group_id: str, payload: GroupMember, current_user: dict = {"roles": ["admin"], "username": "test_user"}):
-    logger.info(f"添加成员请求: group_id={group_id}, payload={payload.dict()}")
-    cu = _parse_current_user(current_user)
+async def add_group_member(group_id: str, payload: GroupMember):
+    logger.info(f"添加成员请求: group_id={group_id}, payload={payload.model_dump()}")
+    cu = _parse_current_user(payload.current_user.model_dump())
     # only group owner or group admin can add members
     if payload.member_type not in ["student", "teacher", "admin"]:
         logger.warning(f"无效member_type: {payload.member_type}")
@@ -792,8 +816,8 @@ async def add_group_member(group_id: str, payload: GroupMember, current_user: di
     summary="删除群组成员",
     description="从指定群组移除成员（软删除，设置 is_active=0）"
 )
-async def remove_group_member(group_id: str, payload: GroupMember, current_user: dict = {"roles": ["admin"], "username": "test_user"}):
-    cu = _parse_current_user(current_user)
+async def remove_group_member(group_id: str, payload: GroupMember):
+    cu = _parse_current_user(payload.current_user.model_dump())
     # only owner or group admin can remove members
 
     if payload.member_type not in ["student", "teacher", "admin"]:
@@ -1242,19 +1266,27 @@ async def get_group_papers(
         conn.close()
 
 
+class BatchDownloadRequest(BaseModel):
+    """批量下载请求体"""
+    group_id: str
+    student_ids: List[int] | None = None
+    format: str = "zip"
+    current_user: CurrentUser
+
+
 @router.post(
     "/download/batch",
     summary="批量下载群组论文",
     description="管理员或老师批量下载指定群组的学生论文，支持zip和原格式下载"
 )
 async def batch_download_papers(
-    group_id: str = Query(..., description="群组ID"),
-    student_ids: List[int] = Query(None, description="要下载论文的学生ID列表，不传则下载所有学生的论文"),
-    format: str = Query("zip", description="下载格式：zip或original"),
-    current_user: str = Query('{"sub": 1, "roles": ["admin"], "username": "admin"}', description="当前登录用户信息(JSON字符串)，示例: {\"sub\":1,\"roles\":[\"admin\"],\"username\":\"admin\"}")
+    payload: BatchDownloadRequest
 ):
     """批量下载群组论文的实现"""
-    cu = _parse_current_user(current_user)
+    cu = _parse_current_user(payload.current_user.model_dump())
+    group_id = payload.group_id
+    student_ids = payload.student_ids
+    format = payload.format
     roles_norm = _normalize_roles(cu.get("roles", []))
     
     # 验证权限：只有管理员或教师可以批量下载论文
@@ -1351,6 +1383,12 @@ async def batch_download_papers(
         conn.close()
 
 
+class SetTeacherAdminRequest(BaseModel):
+    """设置教师管理员请求体"""
+    teacher_internal_id: int
+    current_user: CurrentUser
+
+
 @router.post(
     "/{group_id}/set-teacher-admin",
     summary="设置群组管理员教师",
@@ -1358,10 +1396,10 @@ async def batch_download_papers(
 )
 async def set_group_teacher_admin(
     group_id: str,
-    teacher_internal_id: int = Query(..., description="教师内部ID（数据库teachers表的id）"),
-    current_user: Optional[str] = Query(None, description="当前登录用户信息(JSON字符串)，示例: {\"sub\":1,\"roles\":[\"admin\"],\"username\":\"admin\"}"),
+    payload: SetTeacherAdminRequest,
 ):
-    cu = _parse_current_user(current_user)
+    cu = _parse_current_user(payload.current_user.model_dump())
+    teacher_internal_id = payload.teacher_internal_id
     caller_id = cu.get("sub", 0)
     if not caller_id:
         raise HTTPException(status_code=403, detail="无效的用户身份信息")
