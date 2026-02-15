@@ -226,7 +226,7 @@ CREATE TABLE IF NOT EXISTS `papers_history` (
 
 
 PAPER_REVIEWS_TABLE_SQL = """
-CREATE TABLE paper_reviews (
+CREATE TABLE IF NOT EXISTS `paper_reviews` (
     id INT AUTO_INCREMENT PRIMARY KEY COMMENT '审阅记录ID',
     paper_id INT NOT NULL COMMENT '论文ID',
     teacher_id INT NOT NULL COMMENT '教师ID',
@@ -262,7 +262,7 @@ CREATE TABLE IF NOT EXISTS `annotations` (
 
 
 DDL_MANAGEMENT_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS ddl_management (
+CREATE TABLE IF NOT EXISTS `ddl_management` (
     ddlid INT PRIMARY KEY AUTO_INCREMENT COMMENT 'DDL唯一ID',
     creator_id INT NOT NULL COMMENT '创建人ID',
     teacher_id INT NOT NULL COMMENT '教师ID（与创建人ID一致）',
@@ -361,7 +361,9 @@ def init_db(database_url: str | None = None) -> None:
                 GROUP_MEMBERS_TABLE_SQL,
                 PAPERS_TABLE_SQL,
                 PAPERS_HISTORY_TABLE_SQL,
+                PAPER_REVIEWS_TABLE_SQL,
                 ANNOTATIONS_TABLE_SQL,
+                DDL_MANAGEMENT_TABLE_SQL,
                 TEMPLATES_TABLE_SQL,
                 USER_MESSAGES_TABLE_SQL,
                 OPERATION_LOGS_TABLE_SQL,
@@ -369,7 +371,8 @@ def init_db(database_url: str | None = None) -> None:
                 cur.execute(sql)
         print(
             "Tables ensured: students, teachers, admins, file_records, groups, group_members, "
-            "papers, papers_history, annotations, templates, user_messages, operation_logs"
+            "papers, papers_history, paper_reviews, annotations, ddl_management, templates, "
+            "user_messages, operation_logs"
         )
     finally:
         conn.close()
@@ -494,6 +497,16 @@ TABLE_COLUMN_DEFINITIONS = {
         "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'",
         "updated_at": "`updated_at` DATETIME NOT NULL COMMENT '更新时间'",
     },
+    "paper_reviews": {
+        "id": "`id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '审阅记录ID'",
+        "paper_id": "`paper_id` INT NOT NULL COMMENT '论文ID'",
+        "teacher_id": "`teacher_id` INT NOT NULL COMMENT '教师ID'",
+        "review_content": "`review_content` TEXT NOT NULL COMMENT '审阅内容'",
+        "review_time": "`review_time` DATETIME NOT NULL COMMENT '审阅时间'",
+        "updated_time": "`updated_time` DATETIME DEFAULT NULL COMMENT '更新时间'",
+        "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
+        "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间'",
+    },
     "annotations": {
         "id": "`id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY",
         "paper_id": "`paper_id` INT NOT NULL COMMENT '所属论文ID'",
@@ -503,6 +516,14 @@ TABLE_COLUMN_DEFINITIONS = {
         "content": "`content` TEXT NOT NULL COMMENT '批注内容'",
         "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'",
         "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'",
+    },
+    "ddl_management": {
+        "ddlid": "`ddlid` INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'DDL唯一ID'",
+        "creator_id": "`creator_id` INT NOT NULL COMMENT '创建人ID'",
+        "teacher_id": "`teacher_id` INT NOT NULL COMMENT '教师ID（与创建人ID一致）'",
+        "teacher_name": "`teacher_name` VARCHAR(50) NOT NULL COMMENT '教师姓名'",
+        "ddl_time": "`ddl_time` DATETIME NOT NULL COMMENT '截止时间（精确到秒）'",
+        "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'",
     },
     "templates": {
         "id": "`id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY",
@@ -590,9 +611,19 @@ TABLE_INDEX_DEFINITIONS = {
         "CREATE INDEX idx_papers_history_status ON `papers_history` (status)",
         "CREATE INDEX idx_papers_history_created_at ON `papers_history` (created_at)"
     ],
+    "paper_reviews": [
+        "CREATE INDEX idx_paper_id ON `paper_reviews` (paper_id)",
+        "CREATE INDEX idx_teacher_id ON `paper_reviews` (teacher_id)",
+        "CREATE INDEX idx_paper_teacher ON `paper_reviews` (paper_id, teacher_id)"
+    ],
     "annotations": [
         "CREATE INDEX idx_annotations_paper_id ON `annotations` (paper_id)",
         "CREATE INDEX idx_annotations_author_id ON `annotations` (author_id)"
+    ],
+    "ddl_management": [
+        "CREATE INDEX idx_teacher_id ON `ddl_management` (teacher_id)",
+        "CREATE INDEX idx_ddl_time ON `ddl_management` (ddl_time)",
+        "CREATE INDEX idx_teacher_name ON `ddl_management` (teacher_name)"
     ],
     "templates": [
         "CREATE INDEX idx_template_id ON `templates` (template_id)"
@@ -636,7 +667,9 @@ def sync_schema(database_url: str | None = None) -> None:
                 GROUP_MEMBERS_TABLE_SQL,
                 PAPERS_TABLE_SQL,
                 PAPERS_HISTORY_TABLE_SQL,
+                PAPER_REVIEWS_TABLE_SQL,
                 ANNOTATIONS_TABLE_SQL,
+                DDL_MANAGEMENT_TABLE_SQL,
                 TEMPLATES_TABLE_SQL,
                 USER_MESSAGES_TABLE_SQL,
                 OPERATION_LOGS_TABLE_SQL,
