@@ -253,7 +253,7 @@ def list_material_names(
         cursor = db.cursor(pymysql.cursors.DictCursor)
         # 构建基础查询SQL
         query_sql = """
-            SELECT id, name, filename, file_type, upload_time, version 
+            SELECT id, name, filename, file_type, upload_time, version, storage_path 
             FROM file_records 
             WHERE 1=1
         """
@@ -281,7 +281,8 @@ def list_material_names(
                 "filename": record["filename"],
                 "file_type": record["file_type"],
                 "upload_time": record["upload_time"],
-                "version": record["version"]
+                "version": record["version"],
+                "storage_path": record["storage_path"]  # 新增返回存储路径
             }
             for record in records
         ]
