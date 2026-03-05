@@ -28,6 +28,16 @@ def _parse_current_user(current_user: Optional[str]) -> dict:
         pass
     return {"sub": 0, "username": "", "roles": []}
 
+
+def _parse_coordinates(coord_str: Optional[str]) -> Optional[Dict[str, float]]:
+    if not coord_str:
+        return None
+    try:
+        return json.loads(coord_str)
+    except Exception:
+        logger.warning(f"解析坐标失败: {coord_str}")
+        return None
+
 @router.post(
     "/",
     response_model=AnnotationOut,
@@ -131,7 +141,7 @@ def create_annotation(
             paper_id=paper_id,
             author_id=login_user_id,
             paragraph_id=paragraph_id,
-            coordinates=coord_json,
+            coordinates=_parse_coordinates(coord_json), 
             content=content.strip(),
             created_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             updated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -259,8 +269,7 @@ def update_annotation(
                 paper_id=row[1],
                 author_id=row[2],
                 paragraph_id=row[3],
-                coordinates=row[4],
-                content=row[5],
+                coordinates=_parse_coordinates(row[4]), 
                 created_at=row[6].strftime("%Y-%m-%dT%H:%M:%SZ"),
                 updated_at=row[7].strftime("%Y-%m-%dT%H:%M:%SZ")
             )
@@ -293,7 +302,7 @@ def update_annotation(
             paper_id=row[1],
             author_id=row[2],
             paragraph_id=row[3],
-            coordinates=row[4],
+            coordinates=_parse_coordinates(row[4]),
             content=row[5],
             created_at=row[6].strftime("%Y-%m-%dT%H:%M:%SZ"),
             updated_at=row[7].strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -359,7 +368,7 @@ def list_annotations_by_paper(
                 paper_id=row["paper_id"],
                 author_id=row["author_id"],
                 paragraph_id=row.get("paragraph_id"),
-                coordinates=row.get("coordinates"),
+                coordinates=_parse_coordinates(row.get("coordinates")), 
                 content=row.get("content"),
                 created_at=row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ") if row["created_at"] else None,
                 updated_at=row["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ") if row["updated_at"] else None,

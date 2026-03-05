@@ -407,6 +407,8 @@ def init_db(database_url: str | None = None) -> None:
     try:
         with conn.cursor() as cur:
             for sql in (
+                SCHOOLS_TABLE_SQL,
+                DEPARTMENTS_TABLE_SQL,
                 STUDENTS_TABLE_SQL,
                 TEACHERS_TABLE_SQL,
                 ADMINS_TABLE_SQL,
@@ -424,7 +426,7 @@ def init_db(database_url: str | None = None) -> None:
             ):
                 cur.execute(sql)
         print(
-            "Tables ensured: students, teachers, admins, file_records, groups, group_members, "
+            "Tables ensured: schools, departments, students, teachers, admins, file_records, groups, group_members, "
             "papers, papers_history, paper_reviews, annotations, ddl_management, templates, "
             "user_messages, operation_logs"
         )
@@ -451,6 +453,23 @@ def _get_existing_indexes(conn: pymysql.connections.Connection, db_name: str, ta
 
 
 TABLE_COLUMN_DEFINITIONS = {
+    "schools": {
+        "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键ID'",
+        "school_id": "`school_id` BIGINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '学校唯一标识ID（默认值0，插入时需显式赋值）'",
+        "school_name": "`school_name` VARCHAR(128) NOT NULL COMMENT '学校名称'",
+        "province": "`province` VARCHAR(64) DEFAULT NULL COMMENT '所属省份'",
+        "city": "`city` VARCHAR(64) DEFAULT NULL COMMENT '所属城市'",
+        "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
+        "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间'",
+    },
+    "departments": {
+        "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键ID'",
+        "department_id": "`department_id` BIGINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '院系唯一标识ID'",
+        "department_name": "`department_name` VARCHAR(128) NOT NULL COMMENT '院系名称'",
+        "school_id": "`school_id` BIGINT UNSIGNED NOT NULL COMMENT '所属学校ID（关联schools表的school_id）'",
+        "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
+        "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间'",
+    },
     "students": {
         "id": "`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY",
         "student_id": "`student_id` VARCHAR(20) NOT NULL COMMENT '学号'",
@@ -460,6 +479,10 @@ TABLE_COLUMN_DEFINITIONS = {
         "password": "`password` VARCHAR(255) NOT NULL COMMENT '密码哈希'",
         "grade": "`grade` VARCHAR(64) DEFAULT NULL COMMENT '年级'",
         "class_name": "`class_name` VARCHAR(64) DEFAULT NULL COMMENT '班级'",
+        "school_id": "`school_id` BIGINT UNSIGNED NULL COMMENT '所属学校ID'",
+        "school_name": "`school_name` VARCHAR(128) NULL COMMENT '学校名称'",
+        "department_id": "`department_id` BIGINT UNSIGNED NULL COMMENT '所属院系ID'",
+        "department_name": "`department_name` VARCHAR(128) NULL COMMENT '院系名称'",
         "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
         "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间'",
     },
@@ -472,6 +495,10 @@ TABLE_COLUMN_DEFINITIONS = {
         "password": "`password` VARCHAR(255) NOT NULL COMMENT '密码哈希'",
         "department": "`department` VARCHAR(128) DEFAULT NULL COMMENT '院系/部门'",
         "title": "`title` VARCHAR(64) DEFAULT NULL COMMENT '职称'",
+        "school_id": "`school_id` BIGINT UNSIGNED NULL COMMENT '所属学校ID'",
+        "school_name": "`school_name` VARCHAR(128) NULL COMMENT '学校名称'",
+        "department_id": "`department_id` BIGINT UNSIGNED NULL COMMENT '所属院系ID'",
+        "department_name": "`department_name` VARCHAR(128) NULL COMMENT '院系名称'",
         "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
         "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间'",
     },
@@ -483,6 +510,10 @@ TABLE_COLUMN_DEFINITIONS = {
         "email": "`email` VARCHAR(255) DEFAULT NULL COMMENT '邮箱'",
         "password": "`password` VARCHAR(255) NOT NULL COMMENT '密码哈希'",
         "role": "`role` VARCHAR(64) NOT NULL DEFAULT 'admin' COMMENT '管理员角色'",
+        "school_id": "`school_id` BIGINT UNSIGNED NULL COMMENT '所属学校ID'",
+        "school_name": "`school_name` VARCHAR(128) NULL COMMENT '学校名称'",
+        "department_id": "`department_id` BIGINT UNSIGNED NULL COMMENT '所属院系ID'",
+        "department_name": "`department_name` VARCHAR(128) NULL COMMENT '院系名称'",
         "created_at": "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间'",
         "updated_at": "`updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间'",
     },
@@ -624,24 +655,39 @@ TABLE_COLUMN_DEFINITIONS = {
 
 
 TABLE_INDEX_DEFINITIONS = {
+    "schools": [
+        "CREATE UNIQUE INDEX uniq_school_id ON `schools` (school_id)",
+        "CREATE INDEX idx_school_name ON `schools` (school_name)"
+    ],
+    "departments": [
+        "CREATE UNIQUE INDEX uniq_department_id ON `departments` (department_id)",
+        "CREATE INDEX idx_department_name ON `departments` (department_name)",
+        "CREATE INDEX idx_department_school_id ON `departments` (school_id)"
+    ],
     "students": [
         "CREATE INDEX idx_name ON `students` (name)",
         "CREATE INDEX idx_student_phone ON `students` (phone)",
         "CREATE INDEX idx_student_email ON `students` (email)",
         "CREATE INDEX idx_grade ON `students` (grade)",
-        "CREATE INDEX idx_class_name ON `students` (class_name)"
+        "CREATE INDEX idx_class_name ON `students` (class_name)",
+        "CREATE INDEX idx_student_school_id ON `students` (school_id)",
+        "CREATE INDEX idx_student_department_id ON `students` (department_id)"
     ],
     "teachers": [
         "CREATE INDEX idx_name ON `teachers` (name)",
         "CREATE INDEX idx_teacher_phone ON `teachers` (phone)",
         "CREATE INDEX idx_teacher_email ON `teachers` (email)",
-        "CREATE INDEX idx_department ON `teachers` (department)"
+        "CREATE INDEX idx_department ON `teachers` (department)",
+        "CREATE INDEX idx_teacher_school_id ON `teachers` (school_id)",
+        "CREATE INDEX idx_teacher_department_id ON `teachers` (department_id)"
     ],
     "admins": [
         "CREATE INDEX idx_name ON `admins` (name)",
         "CREATE INDEX idx_admin_phone ON `admins` (phone)",
         "CREATE INDEX idx_admin_email ON `admins` (email)",
-        "CREATE INDEX idx_role ON `admins` (role)"
+        "CREATE INDEX idx_role ON `admins` (role)",
+        "CREATE INDEX idx_admin_school_id ON `admins` (school_id)",
+        "CREATE INDEX idx_admin_department_id ON `admins` (department_id)"
     ],
     "file_records": [
         "CREATE INDEX idx_name ON `file_records` (name)",
@@ -717,6 +763,8 @@ def sync_schema(database_url: str | None = None) -> None:
         # Create base tables if missing
         with conn.cursor() as cur:
             for sql in (
+                SCHOOLS_TABLE_SQL,
+                DEPARTMENTS_TABLE_SQL,
                 STUDENTS_TABLE_SQL,
                 TEACHERS_TABLE_SQL,
                 ADMINS_TABLE_SQL,
