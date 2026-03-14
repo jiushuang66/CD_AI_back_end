@@ -99,7 +99,8 @@ async def upload_material(
                 file.filename,
                 storage_path,
                 file_type,
-                version,          
+                version,
+                remark,          
             )
         )
         # 获取新增记录ID
